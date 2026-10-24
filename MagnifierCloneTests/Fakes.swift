@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreImage
 import Foundation
+import Synchronization
 @testable import MagnifierClone
 
 final class FakeFrames: FrameSource {
@@ -11,12 +12,31 @@ final class FakeFrames: FrameSource {
     func latestFrame() -> CIImage? { frame }
 }
 
+/// Records how a fake's stream terminated; `onTermination` may fire off the main actor.
+nonisolated final class TerminationProbe: Sendable {
+    enum Outcome: Equatable, Sendable { case finished, cancelled }
+    private let state = Mutex<Outcome?>(nil)
+
+    var outcome: Outcome? { state.withLock { $0 } }
+
+    func attach<T>(to continuation: AsyncThrowingStream<T, Error>.Continuation) {
+        continuation.onTermination = { [self] termination in
+            let outcome: Outcome
+            if case .cancelled = termination { outcome = .cancelled } else { outcome = .finished }
+            state.withLock { $0 = outcome }
+        }
+    }
+}
+
 final class FakeAsk: AskServicing {
     var availability: ModelAvailability = .available
     private(set) var calls: [(question: String, route: AskRoute)] = []
     private(set) var frames: [FrozenFrame] = []
     /// One continuation per `answer` call, in call order.
     private(set) var continuations: [AsyncThrowingStream<AskUpdate, Error>.Continuation] = []
+
+    /// One termination probe per `answer` call, in call order.
+    private(set) var terminations: [TerminationProbe] = []
 
     var continuation: AsyncThrowingStream<AskUpdate, Error>.Continuation? { continuations.last }
 
@@ -25,6 +45,9 @@ final class FakeAsk: AskServicing {
         calls.append((question, route))
         frames.append(frame)
         continuations.append(continuation)
+        let probe = TerminationProbe()
+        probe.attach(to: continuation)
+        terminations.append(probe)
         return stream
     }
 }
@@ -33,11 +56,15 @@ final class FakeSpeech: SpeechServicing {
     private(set) var stopCount = 0
     private(set) var transcribeCount = 0
     private(set) var continuation: AsyncThrowingStream<String, Error>.Continuation?
+    private(set) var termination: TerminationProbe?
 
     func transcribe() -> AsyncThrowingStream<String, Error> {
         let (stream, continuation) = AsyncThrowingStream.makeStream(of: String.self, throwing: Error.self)
         transcribeCount += 1
         self.continuation = continuation
+        let probe = TerminationProbe()
+        probe.attach(to: continuation)
+        termination = probe
         return stream
     }
 

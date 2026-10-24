@@ -245,6 +245,96 @@ struct AppModelTests {
         #expect(!feedback.isRunning)
     }
 
+    @Test func askErrorAfterPartialShowsFailure() async throws {
+        startTypedAsk()
+        let stream = try #require(ask.continuation)
+        stream.yield(.partial("It is"))
+        #expect(await waitUntil {
+            model.phase == .answering(question: "what is this", answer: "It is", notice: nil, isComplete: false)
+        })
+        stream.finish(throwing: FakeError())
+        #expect(await waitUntil { model.phase == .failed(question: "what is this", message: "The model failed") })
+        #expect(!feedback.isRunning)
+        #expect(feedback.startCount == 1)
+        model.dismissAnswer()
+        #expect(model.phase == .frozen)
+    }
+
+    @Test func speechErrorWithTranscriptShowsFailure() async throws {
+        settings.inputMode = .voice
+        model.askTapped()
+        let speechStream = try #require(speech.continuation)
+        speechStream.yield("what is")
+        #expect(await waitUntil { model.phase == .listening(transcript: "what is") })
+        speechStream.finish(throwing: FakeError())
+        #expect(await waitUntil { model.phase == .failed(question: "what is", message: "The model failed") })
+        #expect(ask.calls.isEmpty)
+    }
+
+    @Test func speechErrorWithEmptyTranscriptReturnsToFrozen() async throws {
+        settings.inputMode = .voice
+        model.askTapped()
+        try #require(speech.continuation).finish(throwing: FakeError())
+        #expect(await waitUntil { model.phase == .frozen })
+        #expect(model.frozenImage != nil)
+        #expect(ask.calls.isEmpty)
+        #expect(feedback.startCount == 0)
+    }
+
+    // MARK: - Guards
+
+    @Test func submitWhileAskingIsIgnored() async throws {
+        startTypedAsk()
+        model.submit(question: "again")
+        #expect(model.phase == .asking(question: "what is this"))
+        #expect(ask.calls.count == 1)
+        #expect(feedback.startCount == 1)
+
+        try #require(ask.continuation).yield(.partial("A mug"))
+        #expect(await waitUntil {
+            if case .answering = model.phase { return true } else { return false }
+        })
+        model.submit(question: "again")
+        #expect(model.phase == .answering(question: "what is this", answer: "A mug", notice: nil, isComplete: false))
+        #expect(ask.calls.count == 1)
+        #expect(feedback.startCount == 1)
+    }
+
+    @Test func submitWhileFrozenIsIgnored() {
+        model.capture()
+        model.submit(question: "what is this")
+        #expect(model.phase == .frozen)
+        #expect(ask.calls.isEmpty)
+    }
+
+    @Test func chooseWhileAskingIsIgnored() async throws {
+        startTypedAsk()
+        model.choose(.voice)
+        model.choose(.text)
+        #expect(model.phase == .asking(question: "what is this"))
+        #expect(feedback.isRunning)
+        #expect(speech.transcribeCount == 0)
+        await settle()
+        #expect(ask.terminations.first?.outcome == nil)
+    }
+
+    @Test func chooseWhileListeningIsIgnored() {
+        settings.inputMode = .voice
+        model.askTapped()
+        model.choose(.voice)
+        model.choose(.text)
+        #expect(model.phase == .listening(transcript: ""))
+        #expect(speech.transcribeCount == 1)
+    }
+
+    @Test func choosingTextFromChooserDoesNotTouchSpeech() {
+        model.askTapped()
+        #expect(model.phase == .choosingInput)
+        model.choose(.text)
+        #expect(model.phase == .typing)
+        #expect(speech.stopCount == 0)
+    }
+
     // MARK: - Dismiss / release
 
     @Test func dismissAnswerReturnsToFrozen() async throws {
@@ -285,6 +375,25 @@ struct AppModelTests {
         await settle()
         #expect(model.phase == .live)
         #expect(ask.calls.count == 1)
+    }
+
+    @Test func releaseCancelsAskStream() async throws {
+        startTypedAsk()
+        let probe = try #require(ask.terminations.first)
+        #expect(probe.outcome == nil)
+        model.release()
+        #expect(await waitUntil { probe.outcome == .cancelled })
+    }
+
+    @Test func releaseCancelsSpeechStream() async throws {
+        settings.inputMode = .voice
+        model.askTapped()
+        let probe = try #require(speech.termination)
+        try #require(speech.continuation).yield("what")
+        #expect(await waitUntil { model.phase == .listening(transcript: "what") })
+        #expect(probe.outcome == nil)
+        model.release()
+        #expect(await waitUntil { probe.outcome == .cancelled })
     }
 
     @Test func lateUpdatesAfterReleaseAreIgnored() async throws {

@@ -38,6 +38,9 @@ final class AppModel {
     @ObservationIgnored private var task: Task<Void, Never>?
     /// Bumped whenever the current run is superseded; updates from older runs are dropped.
     @ObservationIgnored private var generation = 0
+    /// Whether this model currently has a transcription or the waiting feedback running.
+    @ObservationIgnored private var isListening = false
+    @ObservationIgnored private var isFeedbackRunning = false
 
     init(settings: AppSettings, frames: FrameSource, ask: AskServicing, speech: SpeechServicing, feedback: WaitingFeedbackPlaying) {
         self.settings = settings
@@ -55,6 +58,8 @@ final class AppModel {
     }
 
     func release() {
+        isListening = false
+        isFeedbackRunning = false
         cancelRun()
         speech.stop()
         feedback.stop()
@@ -89,7 +94,12 @@ final class AppModel {
     }
 
     func choose(_ kind: InputKind) {
-        guard frozenImage != nil else { return }
+        switch phase {
+        case .frozen, .choosingInput, .typing, .failed:
+            break
+        case .live, .listening, .asking, .awaitingCloudConsent, .answering:
+            return
+        }
         cancelRun()
         switch kind {
         case .text:
@@ -108,6 +118,7 @@ final class AppModel {
     private func listen() {
         let run = generation
         let stream = speech.transcribe()
+        isListening = true
         task = Task { [weak self] in
             var transcript = ""
             do {
@@ -117,10 +128,18 @@ final class AppModel {
                     self.phase = .listening(transcript: text)
                 }
                 guard let self, self.generation == run else { return }
+                self.isListening = false
                 self.submit(question: transcript)
             } catch {
                 guard let self, self.generation == run else { return }
-                self.phase = .failed(question: transcript, message: error.localizedDescription)
+                self.isListening = false
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    self.cancelRun()
+                    self.phase = .frozen
+                } else {
+                    self.phase = .failed(question: trimmed, message: error.localizedDescription)
+                }
             }
         }
     }
@@ -128,7 +147,12 @@ final class AppModel {
     // MARK: - Asking
 
     func submit(question: String) {
-        guard frozenImage != nil else { return }
+        switch phase {
+        case .typing, .listening:
+            break
+        default:
+            return
+        }
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             cancelRun()
@@ -151,7 +175,6 @@ final class AppModel {
         switch phase {
         case .answering, .failed:
             cancelRun()
-            feedback.stop()
             phase = .frozen
         default:
             break
@@ -163,7 +186,7 @@ final class AppModel {
         cancelRun()
         let run = generation
         phase = .asking(question: question)
-        feedback.start(interval: settings.waitInterval)
+        startFeedback()
         let stream = ask.answer(question, frame: frame, route: route)
 
         task = Task { [weak self] in
@@ -174,11 +197,11 @@ final class AppModel {
                     switch update {
                     case .partial(let text):
                         guard !text.isEmpty else { continue }
-                        if answer == nil { self.feedback.stop() }
+                        self.stopFeedback()
                         answer = text
                         self.phase = .answering(question: question, answer: text, notice: notice, isComplete: false)
                     case .needsCloud:
-                        self.feedback.stop()
+                        self.stopFeedback()
                         self.phase = .awaitingCloudConsent(question: question)
                         return
                     }
@@ -187,12 +210,12 @@ final class AppModel {
                 if let answer {
                     self.phase = .answering(question: question, answer: answer, notice: notice, isComplete: true)
                 } else {
-                    self.feedback.stop()
+                    self.stopFeedback()
                     self.phase = .failed(question: question, message: Self.noAnswerMessage)
                 }
             } catch {
                 guard let self, self.generation == run else { return }
-                self.feedback.stop()
+                self.stopFeedback()
                 self.phase = .failed(question: question, message: error.localizedDescription)
             }
         }
@@ -205,10 +228,27 @@ final class AppModel {
         return FrozenFrame(image: image, visibleRect: visible ?? extent)
     }
 
-    /// Supersedes the current run: its task is cancelled and any late updates are dropped.
+    /// Supersedes the current run: its task is cancelled, any late updates are dropped,
+    /// and transcription and waiting feedback it started are stopped.
     private func cancelRun() {
         generation += 1
         task?.cancel()
         task = nil
+        if isListening {
+            isListening = false
+            speech.stop()
+        }
+        stopFeedback()
+    }
+
+    private func startFeedback() {
+        isFeedbackRunning = true
+        feedback.start(interval: settings.waitInterval)
+    }
+
+    private func stopFeedback() {
+        guard isFeedbackRunning else { return }
+        isFeedbackRunning = false
+        feedback.stop()
     }
 }
