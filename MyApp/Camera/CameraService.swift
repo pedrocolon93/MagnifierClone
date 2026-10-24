@@ -23,10 +23,19 @@ nonisolated final class FrameBufferStore: NSObject, AVCaptureVideoDataOutputSamp
     }
 }
 
+nonisolated enum CameraAccess: Equatable, Sendable {
+    /// Not yet asked, or the answer hasn't arrived.
+    case unknown
+    case authorized
+    /// Denied or restricted; only Settings can change it.
+    case denied
+}
+
 /// Back wide camera with hardware zoom; exposes the newest upright frame.
 @Observable
 final class CameraService: FrameSource {
     let session = AVCaptureSession()
+    private(set) var access: CameraAccess = .unknown
     private(set) var sliderValue: Double = 0
     private(set) var zoom = ZoomMapping(maxDeviceFactor: 1)
 
@@ -37,7 +46,11 @@ final class CameraService: FrameSource {
     @ObservationIgnored private var isConfigured = false
 
     func start() async {
-        guard await AVCaptureDevice.requestAccess(for: .video) else { return }
+        guard await AVCaptureDevice.requestAccess(for: .video) else {
+            access = .denied
+            return
+        }
+        access = .authorized
         let session = session, frames = frames, videoQueue = videoQueue, alreadyConfigured = isConfigured
         let result: (device: AVCaptureDevice, maxZoom: CGFloat)? = await withCheckedContinuation { continuation in
             sessionQueue.async {

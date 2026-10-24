@@ -9,6 +9,11 @@ struct RootView: View {
 
     var body: some View {
         CameraLayer(model: model, session: camera.session)
+            .overlay {
+                if camera.access == .denied {
+                    CameraAccessMessage().padding(.bottom, model.obscuredBottom)
+                }
+            }
             .overlay(alignment: .bottom) {
                 ControlPanel(model: model, camera: camera) { showSettings = true }
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.obscuredBottom = $0 }
