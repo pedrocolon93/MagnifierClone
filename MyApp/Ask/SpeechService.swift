@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 import Speech
 
 nonisolated enum SpeechServiceError: LocalizedError, Equatable {
@@ -14,7 +15,7 @@ nonisolated enum SpeechServiceError: LocalizedError, Equatable {
         case .unsupportedLanguage:
             "On-device dictation isn't available for your language."
         case .audioUnavailable:
-            "The microphone couldn't be started."
+            "The microphone stopped working. Try asking again."
         }
     }
 }
@@ -52,6 +53,7 @@ final class SpeechService: SpeechServicing {
 private final class DictationSession {
     /// Finish with nothing if no speech arrives within this time after recording starts.
     private static let noSpeechTimeout: Duration = .seconds(10)
+    nonisolated private static let logger = Logger(subsystem: "MagnifierClone", category: "SpeechService")
 
     private let continuation: AsyncThrowingStream<String, Error>.Continuation
     private let silenceTimeout: Duration
@@ -110,7 +112,11 @@ private final class DictationSession {
         }
         if isRecordingSessionSet {
             // Back to what the waiting sound uses: respects the silent switch, mixes with others.
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+            do {
+                try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            } catch {
+                Self.logger.error("Couldn't restore the ambient audio session: \(error.localizedDescription, privacy: .public)")
+            }
             isRecordingSessionSet = false
         }
     }
@@ -172,7 +178,12 @@ private final class DictationSession {
         self.bufferContinuation = bufferContinuation
         try Self.installTap(on: engine.inputNode, feeding: bufferContinuation)
         isTapInstalled = true
-        tasks.append(Task.detached { await Self.convert(buffers, to: format, into: inputs) })
+        tasks.append(Task.detached {
+            let converted = await Self.convert(buffers, to: format, into: inputs)
+            if !converted {
+                await MainActor.run { self.finish(throwing: SpeechServiceError.audioUnavailable) }
+            }
+        })
         engine.prepare()
         try engine.start()
     }
@@ -190,6 +201,8 @@ private final class DictationSession {
                     update(finalizedText + text)
                 }
             }
+            // Results ended without us stopping: nothing more is coming, so submit what we have.
+            finish()
         } catch {
             guard !isTornDown, !(error is CancellationError) else { return }
             finish(throwing: error)
@@ -248,17 +261,24 @@ private final class DictationSession {
     }
 
     /// Converts microphone buffers to the analyzer's format, off the main actor.
+    /// Returns `false` if conversion failed. Then `inputs` is left open so the caller's
+    /// `finish(throwing:)` (which tears down and closes it) wins over a normal results end.
     @concurrent nonisolated private static func convert(
         _ buffers: AsyncStream<AVReadOnlyAudioPCMBuffer>,
         to format: AVAudioFormat,
         into inputs: AsyncStream<AnalyzerInput>.Continuation
-    ) async {
+    ) async -> Bool {
         let converter = AnalyzerInputConverter(analyzerFormat: format)
-        for await buffer in buffers {
-            guard let converted = try? converter.convert(AVAudioPCMBuffer(copying: buffer), at: nil) else { break }
-            converted.forEach { inputs.yield($0) }
+        do {
+            for await buffer in buffers {
+                try converter.convert(AVAudioPCMBuffer(copying: buffer), at: nil).forEach { inputs.yield($0) }
+            }
+            try converter.flush().forEach { inputs.yield($0) }
+            inputs.finish()
+            return true
+        } catch {
+            logger.error("Audio conversion failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
-        (try? converter.flush())?.forEach { inputs.yield($0) }
-        inputs.finish()
     }
 }

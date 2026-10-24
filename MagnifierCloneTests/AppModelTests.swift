@@ -271,11 +271,11 @@ struct AppModelTests {
         #expect(ask.calls.isEmpty)
     }
 
-    @Test func speechErrorWithEmptyTranscriptReturnsToFrozen() async throws {
+    @Test func speechErrorWithEmptyTranscriptShowsFailure() async throws {
         settings.inputMode = .voice
         model.askTapped()
         try #require(speech.continuation).finish(throwing: FakeError())
-        #expect(await waitUntil { model.phase == .frozen })
+        #expect(await waitUntil { model.phase == .failed(question: "", message: FakeError().localizedDescription) })
         #expect(model.frozenImage != nil)
         #expect(ask.calls.isEmpty)
         #expect(feedback.startCount == 0)

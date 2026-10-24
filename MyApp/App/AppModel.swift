@@ -135,11 +135,10 @@ final class AppModel {
                 self.isListening = false
                 let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty {
+                    // Nothing was heard (e.g. permission denied): show why, don't ask.
                     self.cancelRun()
-                    self.phase = .frozen
-                } else {
-                    self.phase = .failed(question: trimmed, message: error.localizedDescription)
                 }
+                self.phase = .failed(question: trimmed, message: error.localizedDescription)
             }
         }
     }
