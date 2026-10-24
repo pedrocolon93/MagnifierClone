@@ -57,10 +57,18 @@ struct FrozenFrameView: View {
     private let rendered: CGImage?
 
     private static let context = CIContext()
+    /// Single-entry cache. The strong CIImage reference prevents identity reuse after dealloc.
+    private static var cached: (source: CIImage, rendered: CGImage?)?
 
-    /// Renders once at init; SwiftUI recreates the view when the frozen image changes.
+    /// SwiftUI recreates this struct on every parent update, so render only when the image instance changes.
     init(image: CIImage) {
-        rendered = Self.context.createCGImage(image, from: image.extent)
+        if let cached = Self.cached, cached.source === image {
+            rendered = cached.rendered
+        } else {
+            let cg = Self.context.createCGImage(image, from: image.extent)
+            Self.cached = (image, cg)
+            rendered = cg
+        }
     }
 
     var body: some View {
