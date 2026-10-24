@@ -32,13 +32,19 @@ struct AskServiceTests {
         #expect(result.contains("HELLO"))
     }
 
+    @Test func visionFallbackKeepsLineBreaks() async throws {
+        let image = Self.render(text: "HELLO\nWORLD", at: CGPoint(x: 40, y: 30))
+        let result = try await VisionFallback.describe(image)
+        #expect(result.contains("HELLO\nWORLD"))
+    }
+
     @Test func visionFallbackEmptyImageMessage() async throws {
         let image = Self.render(text: nil)
         let result = try await VisionFallback.describe(image)
         #expect(!result.contains("Text:"))
     }
 
-    private static func render(text: String?) -> CIImage {
+    private static func render(text: String?, at origin: CGPoint = CGPoint(x: 40, y: 120)) -> CIImage {
         let size = CGSize(width: 1000, height: 400)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -50,7 +56,7 @@ struct AskServiceTests {
                     .font: UIFont.boldSystemFont(ofSize: 120),
                     .foregroundColor: UIColor.black,
                 ]
-                (text as NSString).draw(at: CGPoint(x: 40, y: 120), withAttributes: attributes)
+                (text as NSString).draw(at: origin, withAttributes: attributes)
             }
         }
         return CIImage(cgImage: uiImage.cgImage!)

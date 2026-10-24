@@ -8,7 +8,8 @@ nonisolated enum VisionFallback {
     static let minimumConfidence: Float = 0.3
     static let maximumLabels = 3
 
-    /// `"Text: …"` and/or `"Looks like: …"` lines, or `emptyMessage` when Vision finds neither.
+    /// `"Text: …"` (recognized lines kept on their own lines) and/or `"Looks like: …"`,
+    /// or `emptyMessage` when Vision finds neither.
     static func describe(_ image: CIImage) async throws -> String {
         var textRequest = RecognizeTextRequest()
         textRequest.recognitionLevel = .accurate
@@ -16,7 +17,7 @@ nonisolated enum VisionFallback {
         let textObservations = try await textRequest.perform(on: image)
         let text = textObservations
             .compactMap { $0.topCandidates(1).first?.string }
-            .joined(separator: " ")
+            .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         var classifyRequest = ClassifyImageRequest()
