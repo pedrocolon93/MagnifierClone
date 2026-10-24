@@ -22,6 +22,7 @@ struct RootView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.obscuredBottom = $0 }
                 .ignoresSafeArea(edges: .bottom)
         }
+        .overlay { AskOverlay(model: model) }
         .sheet(isPresented: $showSettings) {
             SettingsView(settings: settings)
                 .presentationDetents([.medium])
