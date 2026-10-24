@@ -38,11 +38,24 @@ final class CameraService: FrameSource {
 
     func start() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else { return }
-        if !isConfigured { configure() }
-        guard isConfigured else { return }
-        let session = session
-        sessionQueue.async {
-            if !session.isRunning { session.startRunning() }
+        let session = session, frames = frames, videoQueue = videoQueue, alreadyConfigured = isConfigured
+        let result: (device: AVCaptureDevice, maxZoom: CGFloat)? = await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                var result: (device: AVCaptureDevice, maxZoom: CGFloat)?
+                if alreadyConfigured {
+                    result = nil
+                } else {
+                    result = Self.configure(session: session, frames: frames, videoQueue: videoQueue)
+                }
+                if (alreadyConfigured || result != nil), !session.isRunning { session.startRunning() }
+                continuation.resume(returning: result)
+            }
+        }
+        if let result {
+            device = result.device
+            zoom = ZoomMapping(maxDeviceFactor: result.maxZoom)
+            isConfigured = true
+            setZoom(slider: sliderValue)
         }
     }
 
@@ -69,27 +82,27 @@ final class CameraService: FrameSource {
         frames.current().map { CIImage(cvPixelBuffer: $0) }
     }
 
-    private func configure() {
+    /// Runs on the session queue.
+    nonisolated private static func configure(
+        session: AVCaptureSession, frames: FrameBufferStore, videoQueue: DispatchQueue
+    ) -> (device: AVCaptureDevice, maxZoom: CGFloat)? {
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: camera) else { return }
+              let input = try? AVCaptureDeviceInput(device: camera) else { return nil }
         session.beginConfiguration()
         defer { session.commitConfiguration() }
         session.sessionPreset = .high
-        guard session.canAddInput(input) else { return }
+        guard session.canAddInput(input) else { return nil }
         session.addInput(input)
 
         let output = AVCaptureVideoDataOutput()
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(frames, queue: videoQueue)
-        guard session.canAddOutput(output) else { return }
+        guard session.canAddOutput(output) else { return nil }
         session.addOutput(output)
         if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
         }
-
-        device = camera
-        zoom = ZoomMapping(maxDeviceFactor: camera.activeFormat.videoMaxZoomFactor)
-        isConfigured = true
+        return (camera, camera.activeFormat.videoMaxZoomFactor)
     }
 }
