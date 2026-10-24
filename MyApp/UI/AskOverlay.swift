@@ -138,6 +138,7 @@ struct AskOverlay: View {
         .background(.ultraThinMaterial, in: .capsule)
         .matchedGeometryEffect(id: "pill", in: pillSpace)
         .padding(.horizontal, 16).padding(.bottom, 8)
+        .defaultFocus($fieldFocused, true)
         .onAppear { fieldFocused = true }
     }
 
@@ -185,8 +186,17 @@ struct AskOverlay: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .onChange(of: parts.isComplete) { _, complete in
-            if complete { AccessibilityNotification.Announcement(parts.body).post() }
+        .onChange(of: announcement, initial: true) { _, text in
+            if let text { AccessibilityNotification.Announcement(text).post() }
+        }
+    }
+
+    /// Text to announce: a finished answer or a failure message; nil while streaming.
+    private var announcement: String? {
+        switch model.phase {
+        case .answering(_, let answer, _, true): answer
+        case .failed(_, let message): message
+        default: nil
         }
     }
 
