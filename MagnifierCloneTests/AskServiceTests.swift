@@ -26,6 +26,24 @@ struct AskServiceTests {
         #expect(!AskService.shouldEscalate(error))
     }
 
+    @Test func escalationAsksForCloudOnlyWhenCloudEnabled() {
+        let error = LanguageModelError.contextSizeExceeded(.init(contextSize: 4096, tokenCount: 5000, debugDescription: "too long"))
+        #expect(AskService.onDeviceFailureAction(for: error, cloudEnabled: true) == .askForCloud)
+        #expect(AskService.onDeviceFailureAction(for: error, cloudEnabled: false) == .useVision)
+    }
+
+    @Test(arguments: [true, false])
+    func guardrailFallsBackToVision(cloudEnabled: Bool) {
+        let error = LanguageModelError.guardrailViolation(.init(debugDescription: "blocked"))
+        #expect(AskService.onDeviceFailureAction(for: error, cloudEnabled: cloudEnabled) == .useVision)
+    }
+
+    @Test(arguments: [true, false])
+    func otherErrorsFail(cloudEnabled: Bool) {
+        #expect(AskService.onDeviceFailureAction(for: CancellationError(), cloudEnabled: cloudEnabled) == .fail)
+        #expect(AskService.onDeviceFailureAction(for: FakeError(), cloudEnabled: cloudEnabled) == .fail)
+    }
+
     @Test func visionFallbackReadsText() async throws {
         let image = Self.render(text: "HELLO 42")
         let result = try await VisionFallback.describe(image)

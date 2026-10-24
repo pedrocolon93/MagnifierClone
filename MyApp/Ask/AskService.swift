@@ -7,6 +7,7 @@ import Vision
 /// only when asked for the `.cloud` route (after the user consents), and Vision as the fallback.
 final class AskService: AskServicing {
     static let instructions = "You help a person with low vision understand what their camera shows. Answer concisely."
+    static let fallbackNotice = "Apple Intelligence couldn't answer this one, so here's what the camera can read."
 
     /// Whether the Private Cloud Compute route may be used. PCC requires Apple's managed
     /// entitlement; without it, construct with `false` so the on-device route never asks for the cloud.
@@ -60,8 +61,16 @@ final class AskService: AskServicing {
             for try await snapshot in stream {
                 continuation.yield(.partial(snapshot.content))
             }
-        } catch where cloudEnabled && shouldEscalate(error) {
-            continuation.yield(.needsCloud)
+        } catch {
+            switch onDeviceFailureAction(for: error, cloudEnabled: cloudEnabled) {
+            case .askForCloud:
+                continuation.yield(.needsCloud)
+            case .useVision:
+                continuation.yield(.notice(fallbackNotice))
+                continuation.yield(.partial(try await VisionFallback.describe(image)))
+            case .fail:
+                throw error
+            }
         }
     }
 
@@ -92,6 +101,29 @@ final class AskService: AskServicing {
     }
 
     // MARK: - Policy
+
+    nonisolated enum OnDeviceFailureAction: Equatable, Sendable {
+        /// Ask the user to consent to Private Cloud Compute.
+        case askForCloud
+        /// Answer with Vision instead, with `fallbackNotice`.
+        case useVision
+        /// Surface the error.
+        case fail
+    }
+
+    /// What to do when the on-device model fails: a larger model could help with escalation errors
+    /// (only offered when the cloud route is enabled); a guardrail refusal won't change with a larger
+    /// model, so it and escalation errors without the cloud get the Vision result rather than raw error text.
+    static func onDeviceFailureAction(for error: Error, cloudEnabled: Bool) -> OnDeviceFailureAction {
+        if isGuardrailViolation(error) { return .useVision }
+        if shouldEscalate(error) { return cloudEnabled ? .askForCloud : .useVision }
+        return .fail
+    }
+
+    static func isGuardrailViolation(_ error: Error) -> Bool {
+        guard let error = error as? LanguageModelError, case .guardrailViolation = error else { return false }
+        return true
+    }
 
     static func mapAvailability(_ availability: SystemLanguageModel.Availability) -> ModelAvailability {
         switch availability {

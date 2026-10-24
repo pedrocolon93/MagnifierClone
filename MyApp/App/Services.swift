@@ -19,6 +19,8 @@ nonisolated enum AskUpdate: Equatable, Sendable {
     case partial(String)
     /// The on-device model can't answer; the user must consent before using Private Cloud Compute.
     case needsCloud
+    /// A short note to show with the answer, e.g. why a fallback answered instead. Applies until the stream ends.
+    case notice(String)
 }
 
 protocol AskServicing: AnyObject {

@@ -238,6 +238,32 @@ struct AppModelTests {
         })
     }
 
+    @Test func noticeUpdateLandsInAnsweringPhase() async throws {
+        startTypedAsk()
+        let stream = try #require(ask.continuation)
+        stream.yield(.notice(AskService.fallbackNotice))
+        stream.yield(.partial("Text: Hello"))
+        stream.finish()
+        #expect(await waitUntil {
+            model.phase == .answering(question: "what is this", answer: "Text: Hello",
+                                      notice: AskService.fallbackNotice, isComplete: true)
+        })
+        #expect(!feedback.isRunning)
+    }
+
+    @Test func noticeAfterPartialUpdatesAnswer() async throws {
+        startTypedAsk()
+        let stream = try #require(ask.continuation)
+        stream.yield(.partial("It is"))
+        #expect(await waitUntil {
+            model.phase == .answering(question: "what is this", answer: "It is", notice: nil, isComplete: false)
+        })
+        stream.yield(.notice("Heads up"))
+        #expect(await waitUntil {
+            model.phase == .answering(question: "what is this", answer: "It is", notice: "Heads up", isComplete: false)
+        })
+    }
+
     @Test func askErrorShowsFailureAndStopsFeedback() async throws {
         startTypedAsk()
         try #require(ask.continuation).finish(throwing: FakeError())

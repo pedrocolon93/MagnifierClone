@@ -190,6 +190,7 @@ final class AppModel {
 
         task = Task { [weak self] in
             var answer: String?
+            var notice = notice
             do {
                 for try await update in stream {
                     guard let self, self.generation == run else { return }
@@ -203,6 +204,11 @@ final class AppModel {
                         self.stopFeedback()
                         self.phase = .awaitingCloudConsent(question: question)
                         return
+                    case .notice(let text):
+                        notice = text
+                        if case .answering(_, let current, _, let isComplete) = self.phase {
+                            self.phase = .answering(question: question, answer: current, notice: text, isComplete: isComplete)
+                        }
                     }
                 }
                 guard let self, self.generation == run else { return }
