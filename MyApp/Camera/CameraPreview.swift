@@ -71,16 +71,17 @@ struct FrozenFrameView: View {
         }
     }
 
+    /// The fill is drawn in an overlay of a flexible base so it can't report its filled size:
+    /// a bare `scaledToFill()` image is wider than the screen and would widen the whole layout.
     var body: some View {
-        Group {
-            if let rendered {
-                Image(decorative: rendered, scale: 1)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Color.black
+        Color.black
+            .overlay {
+                if let rendered {
+                    Image(decorative: rendered, scale: 1)
+                        .resizable()
+                        .scaledToFill()
+                }
             }
-        }
-        .clipped()
+            .clipped()
     }
 }
