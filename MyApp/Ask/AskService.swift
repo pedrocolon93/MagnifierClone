@@ -6,7 +6,25 @@ import Vision
 /// Answers questions about a frozen frame: on-device Foundation Models first, Private Cloud Compute
 /// only when asked for the `.cloud` route (after the user consents), and Vision as the fallback.
 final class AskService: AskServicing {
-    static let instructions = "You help a person with low vision understand what their camera shows. Answer concisely."
+    /// Instructions for each answer style. Standard is the model as is, with only enough to point it at the image.
+    static func instructions(for style: AnswerStyle) -> String {
+        switch style {
+        case .standard:
+            "Answer the question about the attached camera image."
+        case .accessibility:
+            """
+            You help a person who is blind or has low vision understand what their camera shows. \
+            They can't see the image, so a bare yes or no doesn't get them far. \
+            Answer the question directly first, in a sentence. Then add the details that matter for it: \
+            what the text or object says, where things are in the frame (top, bottom, left, right, near the edge), \
+            and what they could do next, such as moving the camera to see more. \
+            For example, for "Is this my electricity bill?" answer like \
+            "Yes, it's an electricity bill from the power company, addressed to you. \
+            The amount due and the due date are in a box at the top right; the payment slip is at the bottom." \
+            Don't say "the image shows". Keep it short enough to read aloud.
+            """
+        }
+    }
     static let fallbackNotice = "Apple Intelligence couldn't answer this one, so here's what the camera can read."
 
     /// Whether the Private Cloud Compute route may be used. PCC requires Apple's managed
@@ -21,17 +39,18 @@ final class AskService: AskServicing {
         Self.mapAvailability(SystemLanguageModel.default.availability)
     }
 
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error> {
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn], style: AnswerStyle) -> AsyncThrowingStream<AskUpdate, Error> {
         let cloudEnabled = cloudEnabled
+        let instructions = Self.instructions(for: style)
         let question = Self.prompt(question, history: history)
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     switch route {
                     case .onDevice:
-                        try await Self.answerOnDevice(question, frame: frame, cloudEnabled: cloudEnabled, into: continuation)
+                        try await Self.answerOnDevice(question, frame: frame, instructions: instructions, cloudEnabled: cloudEnabled, into: continuation)
                     case .cloud where cloudEnabled:
-                        try await Self.answerInCloud(question, frame: frame, into: continuation)
+                        try await Self.answerInCloud(question, frame: frame, instructions: instructions, into: continuation)
                     case .cloud, .vision:
                         let description = try await VisionFallback.describe(FrameCropper.croppedImage(frame))
                         continuation.yield(.partial(description))
@@ -58,7 +77,7 @@ final class AskService: AskServicing {
     // MARK: - Routes
 
     private static func answerOnDevice(
-        _ question: String, frame: FrozenFrame, cloudEnabled: Bool,
+        _ question: String, frame: FrozenFrame, instructions: String, cloudEnabled: Bool,
         into continuation: AsyncThrowingStream<AskUpdate, Error>.Continuation
     ) async throws {
         let session = LanguageModelSession(tools: tools(), instructions: instructions)
@@ -85,7 +104,7 @@ final class AskService: AskServicing {
     }
 
     private static func answerInCloud(
-        _ question: String, frame: FrozenFrame,
+        _ question: String, frame: FrozenFrame, instructions: String,
         into continuation: AsyncThrowingStream<AskUpdate, Error>.Continuation
     ) async throws {
         let url = try FrameCropper.cloudJPEG(frame)

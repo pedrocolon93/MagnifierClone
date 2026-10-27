@@ -15,6 +15,19 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                Section {
+                    Picker("Answer style", selection: $settings.answerStyle) {
+                        Text("Standard").tag(AnswerStyle.standard)
+                        Text("Accessibility").tag(AnswerStyle.accessibility)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Answers")
+                } footer: {
+                    Text(settings.answerStyle == .standard
+                        ? "Answers the question as asked."
+                        : "Also describes the details that matter, where things are, and what you could do next.")
+                }
                 Section("While waiting") {
                     NavigationLink {
                         SoundPicker(selection: $settings.waitingSound)

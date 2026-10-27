@@ -40,6 +40,9 @@ final class CameraService: FrameSource {
     private(set) var zoom = ZoomMapping(maxDeviceFactor: 1)
     private(set) var position: AVCaptureDevice.Position = .back
     private(set) var isSwitching = false
+    private(set) var isTorchOn = false
+    /// The front camera has no torch.
+    private(set) var hasTorch = false
 
     @ObservationIgnored private let frames = FrameBufferStore()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "camera.session")
@@ -68,6 +71,7 @@ final class CameraService: FrameSource {
         }
         if let result {
             device = result.device
+            hasTorch = result.device.hasTorch
             zoom = ZoomMapping(maxDeviceFactor: result.maxZoom)
             isConfigured = true
             setZoom(slider: sliderValue)
@@ -96,8 +100,21 @@ final class CameraService: FrameSource {
         guard let result else { return }
         device = result.device
         position = target
+        // The torch belongs to the back camera and goes out when it's swapped away.
+        hasTorch = result.device.hasTorch
+        isTorchOn = false
         zoom = ZoomMapping(maxDeviceFactor: result.maxZoom)
         setZoom(slider: 0)
+    }
+
+    func setTorch(_ on: Bool) {
+        guard let device, device.hasTorch, device.isTorchAvailable else { return }
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = on ? .on : .off
+            device.unlockForConfiguration()
+            isTorchOn = on
+        } catch {}
     }
 
     func setZoom(slider: Double) {

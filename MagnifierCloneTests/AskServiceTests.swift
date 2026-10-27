@@ -5,6 +5,13 @@ import UIKit
 @testable import MagnifierClone
 
 struct AskServiceTests {
+    @Test func answerStylesHaveDistinctInstructions() {
+        let standard = AskService.instructions(for: .standard)
+        let accessibility = AskService.instructions(for: .accessibility)
+        #expect(standard != accessibility)
+        #expect(accessibility.contains("where things are"))
+    }
+
     @Test func promptWithoutHistoryIsTheQuestion() {
         #expect(AskService.prompt("what is this", history: []) == "what is this")
     }

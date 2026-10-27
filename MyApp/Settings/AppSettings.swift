@@ -46,6 +46,10 @@ final class AppSettings {
         didSet { defaults.set(waitingSound, forKey: "waitingSound") }
     }
 
+    var answerStyle: AnswerStyle {
+        didSet { defaults.set(answerStyle.rawValue, forKey: "answerStyle") }
+    }
+
     var vibrates: Bool {
         didSet { defaults.set(vibrates, forKey: "vibrates") }
     }
@@ -78,5 +82,6 @@ final class AppSettings {
             waitingSound = Self.builtInSound
         }
         vibrates = defaults.object(forKey: "vibrates") as? Bool ?? true
+        answerStyle = defaults.string(forKey: "answerStyle").flatMap(AnswerStyle.init(rawValue:)) ?? .standard
     }
 }

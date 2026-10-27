@@ -32,10 +32,18 @@ nonisolated struct AskTurn: Equatable, Sendable {
     let isError: Bool
 }
 
+/// Which instructions the model answers with, from Settings.
+nonisolated enum AnswerStyle: String, CaseIterable, Sendable {
+    /// The model as is, like round 1 of the prototype's user testing.
+    case standard
+    /// Answers that also cover the details that matter, where things are, and what to do next (round 2).
+    case accessibility
+}
+
 protocol AskServicing: AnyObject {
     var availability: ModelAvailability { get }
     /// `history` holds earlier answered turns about the same frame, oldest first, for follow-up context.
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error>
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn], style: AnswerStyle) -> AsyncThrowingStream<AskUpdate, Error>
 }
 
 protocol SpeechServicing: AnyObject {

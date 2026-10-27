@@ -220,7 +220,7 @@ final class AppModel {
         let run = generation
         phase = .asking(question: question)
         startFeedback()
-        let stream = ask.answer(question, frame: frame, route: route, history: earlierTurns.filter { !$0.isError })
+        let stream = ask.answer(question, frame: frame, route: route, history: earlierTurns.filter { !$0.isError }, style: settings.answerStyle)
 
         task = Task { [weak self] in
             var answer: String?

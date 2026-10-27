@@ -34,7 +34,7 @@ struct ControlPanel: View {
             handle
             HStack(spacing: 15) {
                 zoomCapsule
-                placeholder("flashlight.off.fill", label: "Torch")
+                torchButton
             }
             .padding(.top, 14)
             bottomRow
@@ -161,6 +161,19 @@ struct ControlPanel: View {
         }
     }
 
+    private var torchButton: some View {
+        circleButton(
+            camera.isTorchOn ? "flashlight.on.fill" : "flashlight.off.fill",
+            label: "Flashlight",
+            tint: camera.isTorchOn ? accent : .white
+        ) {
+            camera.setTorch(!camera.isTorchOn)
+        }
+        .accessibilityValue(camera.isTorchOn ? "On" : "Off")
+        .disabled(!camera.hasTorch)
+        .opacity(camera.hasTorch ? 1 : 0.4)
+    }
+
     private var flipButton: some View {
         circleButton("arrow.triangle.2.circlepath.camera", label: "Flip camera") {
             Task { await camera.flip() }
@@ -209,11 +222,6 @@ struct ControlPanel: View {
             .foregroundStyle(tint)
             .frame(width: buttonSize, height: buttonSize)
             .background(buttonFill, in: .circle)
-    }
-
-    private func placeholder(_ symbol: String, label: String, tint: Color = .white) -> some View {
-        circleButton(symbol, label: label, tint: tint) {}
-            .accessibilityHint("Not available yet")
     }
 }
 

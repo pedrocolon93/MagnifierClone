@@ -70,4 +70,12 @@ struct AppSettingsTests {
         settings.waitDelay = 60
         #expect(settings.waitDelay == 5)
     }
+
+    @Test func answerStyleDefaultsToStandardAndPersists() {
+        let defaults = makeDefaults()
+        let first = AppSettings(defaults: defaults)
+        #expect(first.answerStyle == .standard)
+        first.answerStyle = .accessibility
+        #expect(AppSettings(defaults: defaults).answerStyle == .accessibility)
+    }
 }

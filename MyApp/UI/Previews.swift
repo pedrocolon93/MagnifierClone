@@ -27,7 +27,7 @@ private final class PreviewAsk: AskServicing {
 
     var availability: ModelAvailability { .available }
 
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error> {
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn], style: AnswerStyle) -> AsyncThrowingStream<AskUpdate, Error> {
         AsyncThrowingStream { continuation in
             switch outcome {
             case .pending:

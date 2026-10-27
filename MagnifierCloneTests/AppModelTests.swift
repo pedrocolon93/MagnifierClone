@@ -155,6 +155,12 @@ struct AppModelTests {
         #expect(feedback.isRunning)
     }
 
+    @Test func askUsesAnswerStyleFromSettings() {
+        settings.answerStyle = .accessibility
+        startTypedAsk()
+        #expect(ask.styles == [.accessibility])
+    }
+
     @Test func askReceivesVisibleRegionOfFrozenFrame() throws {
         model.viewSize = CGSize(width: 390, height: 844)
         model.obscuredBottom = 300

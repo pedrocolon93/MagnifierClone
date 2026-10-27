@@ -33,6 +33,7 @@ final class FakeAsk: AskServicing {
     private(set) var calls: [(question: String, route: AskRoute)] = []
     private(set) var frames: [FrozenFrame] = []
     private(set) var histories: [[AskTurn]] = []
+    private(set) var styles: [AnswerStyle] = []
     /// One continuation per `answer` call, in call order.
     private(set) var continuations: [AsyncThrowingStream<AskUpdate, Error>.Continuation] = []
 
@@ -41,8 +42,9 @@ final class FakeAsk: AskServicing {
 
     var continuation: AsyncThrowingStream<AskUpdate, Error>.Continuation? { continuations.last }
 
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error> {
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn], style: AnswerStyle) -> AsyncThrowingStream<AskUpdate, Error> {
         histories.append(history)
+        styles.append(style)
         let (stream, continuation) = AsyncThrowingStream.makeStream(of: AskUpdate.self, throwing: Error.self)
         calls.append((question, route))
         frames.append(frame)
