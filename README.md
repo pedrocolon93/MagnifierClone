@@ -52,4 +52,4 @@ Tests live in `MagnifierCloneTests` and run with **Product → Test**.
 
 This sample goes with the [Magnifier VQA case study](https://pedroacolon.com/projects/magnifier-vqa/) on my portfolio.
 
-The default waiting sound comes from the [iOSSystemSounds](https://github.com/extratone/iOSSystemSounds) collection.
+No sounds are bundled: the waiting sound is picked from the sounds already on the iPhone.

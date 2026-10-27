@@ -62,7 +62,10 @@ nonisolated struct WaitingCue: Equatable, Sendable {
     var soundURL: URL? = WaitingCue.defaultSoundURL
     var vibrates = true
 
-    static let defaultSoundURL = Bundle.main.url(forResource: "waiting", withExtension: "m4a")
+    /// The "Ding": the DirectionUp sound that ships with iOS, found in the system sounds folder.
+    /// Nil if it isn't there, in which case only the haptic plays.
+    static let defaultSoundURL: URL? = SystemSounds.all()
+        .first { $0.url.deletingPathExtension().lastPathComponent.localizedStandardContains("DirectionUp") }?.url
 }
 
 protocol WaitingFeedbackPlaying: AnyObject {
