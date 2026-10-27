@@ -6,7 +6,6 @@ import Observation
 enum Phase: Equatable {
     case live
     case frozen
-    case choosingInput
     case listening(transcript: String)
     case typing
     case asking(question: String)
@@ -77,25 +76,34 @@ final class AppModel {
 
     // MARK: - Input
 
+    /// Whether Ask offers a Voice/Text menu instead of using the input kind from Settings.
+    var choosesInputEachTime: Bool { settings.inputMode == .askEachTime }
+
+    /// Ask with the input kind from Settings. In Ask each time mode the panel's menu calls `ask(using:)` instead.
     func askTapped() {
+        switch settings.inputMode {
+        case .voice: ask(using: .voice)
+        case .text: ask(using: .text)
+        case .askEachTime: break
+        }
+    }
+
+    /// Freezes the frame if live, then starts taking the question with `kind`.
+    func ask(using kind: InputKind) {
         switch phase {
         case .live:
             guard freeze() else { return }
-        case .frozen, .choosingInput, .typing, .failed:
+        case .frozen, .typing, .failed:
             break
         case .listening, .asking, .awaitingCloudConsent, .answering:
             return
         }
-        switch settings.inputMode {
-        case .askEachTime: phase = .choosingInput
-        case .voice: choose(.voice)
-        case .text: choose(.text)
-        }
+        choose(kind)
     }
 
     func choose(_ kind: InputKind) {
         switch phase {
-        case .frozen, .choosingInput, .typing, .failed:
+        case .frozen, .typing, .failed:
             break
         case .live, .listening, .asking, .awaitingCloudConsent, .answering:
             return

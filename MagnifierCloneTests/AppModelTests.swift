@@ -72,11 +72,20 @@ struct AppModelTests {
 
     // MARK: - Input choice
 
-    @Test func askTappedAskEachTimeShowsChooser() {
+    @Test func askTappedAskEachTimeWaitsForMenuChoice() {
         settings.inputMode = .askEachTime
+        #expect(model.choosesInputEachTime)
         model.askTapped()
-        #expect(model.phase == .choosingInput)
+        #expect(model.phase == .live)
+        #expect(model.frozenImage == nil)
+    }
+
+    @Test func askUsingVoiceFromLiveFreezesAndListens() {
+        settings.inputMode = .askEachTime
+        model.ask(using: .voice)
         #expect(model.frozenImage != nil)
+        #expect(model.phase == .listening(transcript: ""))
+        #expect(speech.transcribeCount == 1)
     }
 
     @Test func askTappedVoiceModeStartsListening() {
@@ -353,10 +362,8 @@ struct AppModelTests {
         #expect(speech.transcribeCount == 1)
     }
 
-    @Test func choosingTextFromChooserDoesNotTouchSpeech() {
-        model.askTapped()
-        #expect(model.phase == .choosingInput)
-        model.choose(.text)
+    @Test func askUsingTextDoesNotTouchSpeech() {
+        model.ask(using: .text)
         #expect(model.phase == .typing)
         #expect(speech.stopCount == 0)
     }

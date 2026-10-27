@@ -30,9 +30,7 @@ struct ControlPanel: View {
                 }
                 GridRow(alignment: .top) {
                     labeled("Detect") { placeholder("viewfinder", label: "Detect") }
-                    labeled("Ask") {
-                        circleButton("text.bubble", label: "Ask") { model.askTapped() }
-                    }
+                    labeled("Ask") { askButton }
                     labeled("Capture") { captureButton }
                     labeled("Settings") {
                         circleButton("gear", label: "Settings", action: openSettings)
@@ -72,6 +70,22 @@ struct ControlPanel: View {
         .background(buttonFill, in: .capsule)
     }
 
+    /// In Ask each time mode, Ask opens a Voice/Text menu; otherwise it asks straight away.
+    @ViewBuilder private var askButton: some View {
+        if model.choosesInputEachTime {
+            Menu {
+                Button("Voice", systemImage: "mic.fill") { model.ask(using: .voice) }
+                Button("Text", systemImage: "keyboard") { model.ask(using: .text) }
+            } label: {
+                circleLabel("text.bubble")
+            }
+            .menuOrder(.fixed)
+            .accessibilityLabel("Ask")
+        } else {
+            circleButton("text.bubble", label: "Ask") { model.askTapped() }
+        }
+    }
+
     private var captureButton: some View {
         Button {
             if model.isFrozen { model.release() } else { model.capture() }
@@ -101,14 +115,16 @@ struct ControlPanel: View {
     }
 
     private func circleButton(_ symbol: String, label: String, tint: Color = .white, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 28))
-                .foregroundStyle(tint)
-                .frame(width: buttonSize, height: buttonSize)
-                .background(buttonFill, in: .circle)
-        }
-        .accessibilityLabel(label)
+        Button(action: action) { circleLabel(symbol, tint: tint) }
+            .accessibilityLabel(label)
+    }
+
+    private func circleLabel(_ symbol: String, tint: Color = .white) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 28))
+            .foregroundStyle(tint)
+            .frame(width: buttonSize, height: buttonSize)
+            .background(buttonFill, in: .circle)
     }
 
     private func placeholder(_ symbol: String, label: String, tint: Color = .white) -> some View {

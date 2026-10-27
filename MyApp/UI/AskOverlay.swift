@@ -12,6 +12,8 @@ struct AskOverlay: View {
             content
             if showsAnswer { answerOverlay.transition(.opacity) }
         }
+        // Fill the screen even when `content` is empty, so the typing pill's inset sits on the keyboard.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) {
             if model.phase == .typing { typingPill }
         }
@@ -25,8 +27,6 @@ struct AskOverlay: View {
 
     @ViewBuilder private var content: some View {
         switch model.phase {
-        case .choosingInput:
-            chooser
         case .listening(let transcript):
             VStack {
                 Button { model.stopListening() } label: {
@@ -54,27 +54,6 @@ struct AskOverlay: View {
         default:
             EmptyView()
         }
-    }
-
-    private var chooser: some View {
-        HStack(spacing: 16) {
-            chooserButton("Voice", symbol: "mic.fill") { model.choose(.voice) }
-            chooserButton("Text", symbol: "keyboard") { model.choose(.text) }
-        }
-        .padding(.horizontal, 24)
-    }
-
-    private func chooserButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: symbol).font(.largeTitle)
-                Text(title).font(.title3.bold())
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 120)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 28))
-        }
-        .accessibilityLabel(title)
     }
 
     private var consent: some View {
@@ -116,7 +95,7 @@ struct AskOverlay: View {
 
     private var typingPill: some View {
         HStack(spacing: 8) {
-            Button { model.submit(question: "") } label: {
+            Button(action: cancel) {
                 Image(systemName: "xmark").font(.headline).foregroundStyle(.white)
                     .frame(width: 44, height: 44)
             }
@@ -140,6 +119,11 @@ struct AskOverlay: View {
         .padding(.horizontal, 16).padding(.bottom, 8)
         .defaultFocus($fieldFocused, true)
         .onAppear { fieldFocused = true }
+    }
+
+    private func cancel() {
+        fieldFocused = false
+        withAnimation(.smooth) { model.submit(question: "") }
     }
 
     private func send() {

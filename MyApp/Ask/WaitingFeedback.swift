@@ -40,16 +40,18 @@ final class WaitingFeedback: WaitingFeedbackPlaying {
     }
 
     nonisolated private static func playSound() {
-        if player == nil {
-            guard let url = Bundle.main.url(forResource: "waiting", withExtension: "m4a") else { return }
-            // .ambient + .mixWithOthers respects the silent switch.
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-            try? AVAudioSession.sharedInstance().setActive(true)
-            player = try? AVAudioPlayer(contentsOf: url)
-            player?.prepareToPlay()
-        }
-        player?.currentTime = 0
-        player?.play()
+        Task.detached {
+            if player == nil {
+                guard let url = Bundle.main.url(forResource: "waiting", withExtension: "m4a") else { return }
+                // .ambient + .mixWithOthers respects the silent switch.
+                try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+                try? AVAudioSession.sharedInstance().setActive(true)
+                player = try? AVAudioPlayer(contentsOf: url)
+                player?.prepareToPlay()
+            }
+            player?.currentTime = 0
+            player?.play()
+        }|
     }
 
     nonisolated private static func playHaptic() {
