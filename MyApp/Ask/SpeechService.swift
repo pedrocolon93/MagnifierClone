@@ -112,12 +112,16 @@ private final class DictationSession {
         }
         if isRecordingSessionSet {
             // Back to what the waiting sound uses: respects the silent switch, mixes with others.
-            do {
-                try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-            } catch {
-                Self.logger.error("Couldn't restore the ambient audio session: \(error.localizedDescription, privacy: .public)")
+            Task.detached{
+                do {
+                    try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+                } catch {
+                    Self.logger.error("Couldn't restore the ambient audio session: \(error.localizedDescription, privacy: .public)")
+                }
+                DispatchQueue.main.async{
+                    self.isRecordingSessionSet = false
+                }
             }
-            isRecordingSessionSet = false
         }
     }
 
