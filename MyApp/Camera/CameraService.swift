@@ -123,7 +123,10 @@ final class CameraService: FrameSource {
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: camera) else { return nil }
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
+        defer {
+            session.commitConfiguration()
+            orientConnections(of: session)
+        }
         session.sessionPreset = .high
         guard session.canAddInput(input) else { return nil }
         session.addInput(input)
@@ -134,7 +137,6 @@ final class CameraService: FrameSource {
         output.setSampleBufferDelegate(frames, queue: videoQueue)
         guard session.canAddOutput(output) else { return nil }
         session.addOutput(output)
-        orientFrames(of: output)
         return (camera, camera.activeFormat.videoMaxZoomFactor)
     }
 
@@ -145,7 +147,11 @@ final class CameraService: FrameSource {
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
               let input = try? AVCaptureDeviceInput(device: camera) else { return nil }
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
+        defer {
+            session.commitConfiguration()
+            // The new input brings new connections, including the preview layer's, which start sideways.
+            orientConnections(of: session)
+        }
         let old = session.inputs
         old.forEach(session.removeInput)
         guard session.canAddInput(input) else {
@@ -153,22 +159,20 @@ final class CameraService: FrameSource {
             return nil
         }
         session.addInput(input)
-        // A new input gets a new connection, so portrait and mirroring are set again.
-        for case let output as AVCaptureVideoDataOutput in session.outputs {
-            orientFrames(of: output)
-        }
         return (camera, camera.activeFormat.videoMaxZoomFactor)
     }
 
-    /// Portrait and never mirrored, so text reads correctly for the person and the model, and matches the preview.
-    nonisolated private static func orientFrames(of output: AVCaptureVideoDataOutput) {
-        guard let connection = output.connection(with: .video) else { return }
-        if connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
-        }
-        if connection.isVideoMirroringSupported {
-            connection.automaticallyAdjustsVideoMirroring = false
-            connection.isVideoMirrored = false
+    /// Every video connection (frame output and preview layer alike) is portrait and never mirrored,
+    /// so text reads correctly and the frozen frame matches the preview. Runs after the configuration commits.
+    nonisolated private static func orientConnections(of session: AVCaptureSession) {
+        for connection in session.connections where connection.inputPorts.contains(where: { $0.mediaType == .video }) {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
         }
     }
 }
