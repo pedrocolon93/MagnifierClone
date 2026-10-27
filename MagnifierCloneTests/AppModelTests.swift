@@ -368,6 +368,77 @@ struct AppModelTests {
         #expect(speech.stopCount == 0)
     }
 
+    // MARK: - Follow-ups
+
+    /// Leaves the model with a finished first answer.
+    private func finishFirstAnswer() async throws {
+        startTypedAsk("what is this")
+        let first = try #require(ask.continuation)
+        first.yield(.partial("A mug"))
+        first.finish()
+        #expect(await waitUntil { model.phase == .answering(question: "what is this", answer: "A mug", notice: nil, isComplete: true) })
+    }
+
+    @Test func followUpKeepsEarlierTurnAndSendsItAsContext() async throws {
+        try await finishFirstAnswer()
+        model.askFollowUp("  what color is it?  ")
+        #expect(model.phase == .asking(question: "what color is it?"))
+        #expect(model.earlierTurns == [AskTurn(question: "what is this", answer: "A mug", notice: nil, isError: false)])
+        #expect(ask.calls.last?.question == "what color is it?")
+        #expect(ask.histories == [[], model.earlierTurns])
+        #expect(ask.frames.count == 2)
+        #expect(ask.frames[0].image === ask.frames[1].image)
+        #expect(feedback.isRunning)
+    }
+
+    @Test func followUpIgnoredWhileAnswerStreamsOrBlank() async throws {
+        startTypedAsk()
+        let first = try #require(ask.continuation)
+        first.yield(.partial("A m"))
+        #expect(await waitUntil { if case .answering = model.phase { true } else { false } })
+        model.askFollowUp("more?")
+        #expect(ask.calls.count == 1)
+        first.finish()
+        #expect(await waitUntil { model.phase == .answering(question: "what is this", answer: "A m", notice: nil, isComplete: true) })
+        model.askFollowUp("   ")
+        #expect(ask.calls.count == 1)
+        #expect(model.earlierTurns.isEmpty)
+    }
+
+    @Test func followUpAfterFailureKeepsErrorOutOfContext() async throws {
+        startTypedAsk()
+        let first = try #require(ask.continuation)
+        first.finish(throwing: CancellationError())
+        #expect(await waitUntil { if case .failed = model.phase { true } else { false } })
+        model.askFollowUp("try again")
+        #expect(model.earlierTurns.count == 1)
+        #expect(model.earlierTurns[0].isError)
+        #expect(ask.histories.last == [])
+    }
+
+    @Test func dismissAndFreshAskClearEarlierTurns() async throws {
+        try await finishFirstAnswer()
+        model.askFollowUp("what color is it?")
+        let second = try #require(ask.continuation)
+        second.yield(.partial("Blue"))
+        second.finish()
+        #expect(await waitUntil { model.phase == .answering(question: "what color is it?", answer: "Blue", notice: nil, isComplete: true) })
+        model.dismissAnswer()
+        #expect(model.earlierTurns.isEmpty)
+        #expect(model.phase == .frozen)
+        model.askTapped()
+        model.submit(question: "new question")
+        #expect(ask.histories.last == [])
+    }
+
+    @Test func releaseClearsEarlierTurns() async throws {
+        try await finishFirstAnswer()
+        model.askFollowUp("what color is it?")
+        model.release()
+        #expect(model.earlierTurns.isEmpty)
+        #expect(model.phase == .live)
+    }
+
     // MARK: - Dismiss / release
 
     @Test func dismissAnswerReturnsToFrozen() async throws {

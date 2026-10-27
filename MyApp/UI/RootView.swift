@@ -8,7 +8,7 @@ struct RootView: View {
     @State private var showSettings = false
 
     var body: some View {
-        CameraLayer(model: model, session: camera.session)
+        CameraLayer(model: model, session: camera.session, position: camera.position)
             .overlay {
                 if camera.access == .denied {
                     CameraAccessMessage().padding(.bottom, model.obscuredBottom)
@@ -33,6 +33,7 @@ struct RootView: View {
 struct CameraLayer: View {
     let model: AppModel
     let session: AVCaptureSession
+    var position: AVCaptureDevice.Position = .back
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -43,7 +44,7 @@ struct CameraLayer: View {
             if let image = model.frozenImage, model.isFrozen {
                 FrozenFrameView(image: image)
             } else {
-                CameraPreview(session: session)
+                CameraPreview(session: session, position: position)
             }
         }
         .ignoresSafeArea()

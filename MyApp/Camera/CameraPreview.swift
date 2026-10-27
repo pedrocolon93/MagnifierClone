@@ -3,9 +3,11 @@ import CoreImage
 import SwiftUI
 import UIKit
 
-/// Live camera preview, aspect-fill and portrait.
+/// Live camera preview, aspect-fill, portrait and never mirrored (so the front camera matches its frozen frames).
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    /// Changes when the camera flips, so `updateUIView` re-applies orientation to the new connection.
+    var position: AVCaptureDevice.Position = .back
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -14,10 +16,14 @@ struct CameraPreview: UIViewRepresentable {
 
         /// The preview connection only exists once the session has inputs, so apply this repeatedly.
         func applyPortrait() {
-            guard let connection = previewLayer.connection,
-                  connection.isVideoRotationAngleSupported(90),
-                  connection.videoRotationAngle != 90 else { return }
-            connection.videoRotationAngle = 90
+            guard let connection = previewLayer.connection else { return }
+            if connection.isVideoRotationAngleSupported(90), connection.videoRotationAngle != 90 {
+                connection.videoRotationAngle = 90
+            }
+            if connection.isVideoMirroringSupported, connection.automaticallyAdjustsVideoMirroring || connection.isVideoMirrored {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
         }
 
         func observe(_ session: AVCaptureSession) {

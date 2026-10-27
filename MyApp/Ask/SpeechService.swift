@@ -134,7 +134,8 @@ private final class DictationSession {
             let transcriber = SpeechTranscriber(
                 locale: locale,
                 transcriptionOptions: [],
-                reportingOptions: [.volatileResults],
+                // Volatile + fast results: words show up while the person is still speaking.
+                reportingOptions: [.volatileResults, .fastResults],
                 attributeOptions: []
             )
             let modules: [any SpeechModule] = [transcriber]

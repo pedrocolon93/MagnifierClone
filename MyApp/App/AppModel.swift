@@ -51,6 +51,9 @@ final class AppModel {
 
     // MARK: - Freeze
 
+    /// Earlier turns about this freeze, oldest first; the current turn lives in `phase`.
+    private(set) var earlierTurns: [AskTurn] = []
+
     func capture() {
         guard phase == .live else { return }
         freeze()
@@ -63,6 +66,7 @@ final class AppModel {
         speech.stop()
         feedback.stop()
         frozenImage = nil
+        earlierTurns = []
         phase = .live
     }
 
@@ -166,6 +170,27 @@ final class AppModel {
             phase = .frozen
             return
         }
+        earlierTurns = []
+        route(trimmed)
+    }
+
+    /// Asks another question about the same frame from the answer screen, once the current answer is done.
+    /// The current turn moves into `earlierTurns`, and answered turns go to the model as context.
+    func askFollowUp(_ question: String) {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        switch phase {
+        case .answering(let q, let a, let n, true):
+            earlierTurns.append(AskTurn(question: q, answer: a, notice: n, isError: false))
+        case .failed(let q, let m):
+            earlierTurns.append(AskTurn(question: q, answer: m, notice: nil, isError: true))
+        default:
+            return
+        }
+        route(trimmed)
+    }
+
+    private func route(_ trimmed: String) {
         switch ask.availability {
         case .available: runAsk(trimmed, route: .onDevice, notice: nil)
         case .notReady: runAsk(trimmed, route: .vision, notice: Self.notReadyNotice)
@@ -182,6 +207,7 @@ final class AppModel {
         switch phase {
         case .answering, .failed:
             cancelRun()
+            earlierTurns = []
             phase = .frozen
         default:
             break
@@ -194,7 +220,7 @@ final class AppModel {
         let run = generation
         phase = .asking(question: question)
         startFeedback()
-        let stream = ask.answer(question, frame: frame, route: route)
+        let stream = ask.answer(question, frame: frame, route: route, history: earlierTurns.filter { !$0.isError })
 
         task = Task { [weak self] in
             var answer: String?

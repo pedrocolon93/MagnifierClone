@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 private let buttonSize: CGFloat = 72
@@ -22,14 +23,8 @@ struct ControlPanel: View {
                     zoomCapsule.gridCellColumns(3)
                     placeholder("flashlight.off.fill", label: "Torch")
                 }
-                GridRow {
-                    placeholder("circle.grid.cross.fill", label: "Filters")
-                    placeholder("arrow.triangle.2.circlepath.camera", label: "Flip camera")
-                    placeholder("sun.max.fill", label: "Brightness", tint: accent)
-                    placeholder("circle.circle", label: "Color and contrast", tint: Color(white: 0.55))
-                }
                 GridRow(alignment: .top) {
-                    labeled("Detect") { placeholder("viewfinder", label: "Detect") }
+                    labeled("Flip") { flipButton }
                     labeled("Ask") { askButton }
                     labeled("Capture") { captureButton }
                     labeled("Settings") {
@@ -84,6 +79,15 @@ struct ControlPanel: View {
         } else {
             circleButton("text.bubble", label: "Ask") { model.askTapped() }
         }
+    }
+
+    private var flipButton: some View {
+        circleButton("arrow.triangle.2.circlepath.camera", label: "Flip camera") {
+            Task { await camera.flip() }
+        }
+        .accessibilityValue(camera.position == .front ? "Front camera" : "Back camera")
+        // A frozen frame belongs to the camera that took it.
+        .disabled(model.isFrozen || camera.isSwitching)
     }
 
     private var captureButton: some View {

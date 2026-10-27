@@ -31,13 +31,15 @@ nonisolated enum CameraAccess: Equatable, Sendable {
     case denied
 }
 
-/// Back wide camera with hardware zoom; exposes the newest upright frame.
+/// Wide camera (back or front) with hardware zoom; exposes the newest upright, unmirrored frame.
 @Observable
 final class CameraService: FrameSource {
     let session = AVCaptureSession()
     private(set) var access: CameraAccess = .unknown
     private(set) var sliderValue: Double = 0
     private(set) var zoom = ZoomMapping(maxDeviceFactor: 1)
+    private(set) var position: AVCaptureDevice.Position = .back
+    private(set) var isSwitching = false
 
     @ObservationIgnored private let frames = FrameBufferStore()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "camera.session")
@@ -79,6 +81,25 @@ final class CameraService: FrameSource {
         }
     }
 
+    /// Switches between the back and front cameras and resets zoom to 1×.
+    func flip() async {
+        guard isConfigured, !isSwitching else { return }
+        isSwitching = true
+        defer { isSwitching = false }
+        let target: AVCaptureDevice.Position = position == .back ? .front : .back
+        let session = session
+        let result: (device: AVCaptureDevice, maxZoom: CGFloat)? = await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                continuation.resume(returning: Self.switchInput(on: session, to: target))
+            }
+        }
+        guard let result else { return }
+        device = result.device
+        position = target
+        zoom = ZoomMapping(maxDeviceFactor: result.maxZoom)
+        setZoom(slider: 0)
+    }
+
     func setZoom(slider: Double) {
         let clamped = min(max(slider, 0), 1)
         sliderValue = clamped
@@ -113,9 +134,41 @@ final class CameraService: FrameSource {
         output.setSampleBufferDelegate(frames, queue: videoQueue)
         guard session.canAddOutput(output) else { return nil }
         session.addOutput(output)
-        if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
+        orientFrames(of: output)
+        return (camera, camera.activeFormat.videoMaxZoomFactor)
+    }
+
+    /// Runs on the session queue. Swaps the camera input; on failure the old input stays.
+    nonisolated private static func switchInput(
+        on session: AVCaptureSession, to position: AVCaptureDevice.Position
+    ) -> (device: AVCaptureDevice, maxZoom: CGFloat)? {
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
+              let input = try? AVCaptureDeviceInput(device: camera) else { return nil }
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+        let old = session.inputs
+        old.forEach(session.removeInput)
+        guard session.canAddInput(input) else {
+            old.forEach(session.addInput)
+            return nil
+        }
+        session.addInput(input)
+        // A new input gets a new connection, so portrait and mirroring are set again.
+        for case let output as AVCaptureVideoDataOutput in session.outputs {
+            orientFrames(of: output)
         }
         return (camera, camera.activeFormat.videoMaxZoomFactor)
+    }
+
+    /// Portrait and never mirrored, so text reads correctly for the person and the model, and matches the preview.
+    nonisolated private static func orientFrames(of output: AVCaptureVideoDataOutput) {
+        guard let connection = output.connection(with: .video) else { return }
+        if connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
+        }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = false
+        }
     }
 }

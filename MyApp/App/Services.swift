@@ -23,9 +23,19 @@ nonisolated enum AskUpdate: Equatable, Sendable {
     case notice(String)
 }
 
+/// One finished question about a frozen frame, shown in the answer transcript.
+nonisolated struct AskTurn: Equatable, Sendable {
+    let question: String
+    /// The answer, or the error message when `isError`.
+    let answer: String
+    let notice: String?
+    let isError: Bool
+}
+
 protocol AskServicing: AnyObject {
     var availability: ModelAvailability { get }
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute) -> AsyncThrowingStream<AskUpdate, Error>
+    /// `history` holds earlier answered turns about the same frame, oldest first, for follow-up context.
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error>
 }
 
 protocol SpeechServicing: AnyObject {

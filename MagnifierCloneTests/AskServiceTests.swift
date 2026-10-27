@@ -5,6 +5,28 @@ import UIKit
 @testable import MagnifierClone
 
 struct AskServiceTests {
+    @Test func promptWithoutHistoryIsTheQuestion() {
+        #expect(AskService.prompt("what is this", history: []) == "what is this")
+    }
+
+    @Test func promptCarriesEarlierTurns() {
+        let history = [
+            AskTurn(question: "what is this", answer: "A mug", notice: nil, isError: false),
+            AskTurn(question: "what color?", answer: "Blue", notice: nil, isError: false),
+        ]
+        #expect(AskService.prompt("is it full?", history: history) == """
+            Earlier questions about this same image:
+
+            Question: what is this
+            Answer: A mug
+
+            Question: what color?
+            Answer: Blue
+
+            New question: is it full?
+            """)
+    }
+
     @Test func mapAvailabilityCases() {
         #expect(AskService.mapAvailability(.available) == .available)
         #expect(AskService.mapAvailability(.unavailable(.modelNotReady)) == .notReady)

@@ -21,8 +21,9 @@ final class AskService: AskServicing {
         Self.mapAvailability(SystemLanguageModel.default.availability)
     }
 
-    func answer(_ question: String, frame: FrozenFrame, route: AskRoute) -> AsyncThrowingStream<AskUpdate, Error> {
+    func answer(_ question: String, frame: FrozenFrame, route: AskRoute, history: [AskTurn]) -> AsyncThrowingStream<AskUpdate, Error> {
         let cloudEnabled = cloudEnabled
+        let question = Self.prompt(question, history: history)
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -43,6 +44,15 @@ final class AskService: AskServicing {
             // The consumer cancels its task on release/dismiss; stop the model or Vision work with it.
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// Each question gets a fresh session, so earlier turns about the same frame ride along in the prompt.
+    static func prompt(_ question: String, history: [AskTurn]) -> String {
+        guard !history.isEmpty else { return question }
+        let earlier = history
+            .map { "Question: \($0.question)\nAnswer: \($0.answer)" }
+            .joined(separator: "\n\n")
+        return "Earlier questions about this same image:\n\n\(earlier)\n\nNew question: \(question)"
     }
 
     // MARK: - Routes
