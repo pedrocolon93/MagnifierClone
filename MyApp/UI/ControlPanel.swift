@@ -10,36 +10,116 @@ struct ControlPanel: View {
     let camera: CameraService
     let openSettings: () -> Void
 
-    private let columns = Array(repeating: GridItem(.fixed(buttonSize), spacing: 15), count: 4)
+    /// Gap between the panel and the screen edges, the same on the sides and the bottom.
+    private let edgeGap: CGFloat = 8
+    /// Width of the button rows: four columns and three gaps.
+    private let contentWidth = buttonSize * 4 + 15 * 3
+    /// Panel width, measured, so the inside bottom padding can match the inside side padding.
+    @State private var panelWidth: CGFloat = 0
+    private var insidePadding: CGFloat { max((panelWidth - contentWidth) / 2, 18) }
+
+    private enum DrawerEdge { case expanded, collapsed }
+
+    /// Natural height of the bottom row, including the spacing above it.
+    @State private var rowHeight: CGFloat = 0
+    @State private var isExpanded = true
+    /// Live drag distance; positive is downward.
+    @State private var dragOffset: CGFloat = 0
+    /// The extent the drawer last touched, so the haptic fires once per arrival.
+    @State private var lastEdge: DrawerEdge? = .expanded
+    @State private var edgeHits = 0
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 0) {
+            handle
+            HStack(spacing: 15) {
+                zoomCapsule
+                placeholder("flashlight.off.fill", label: "Torch")
+            }
+            .padding(.top, 14)
+            bottomRow
+        }
+        .padding(.top, 12)
+        .padding(.bottom, insidePadding)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelWidth = $0 }
+        .background(Color(white: 0.09), in: .rect(cornerRadii: .init(topLeading: 44, bottomLeading: 50, bottomTrailing: 50, topTrailing: 44)))
+        .contentShape(.rect)
+        .gesture(drawerDrag)
+        .sensoryFeedback(.impact(weight: .medium), trigger: edgeHits)
+        .padding(.horizontal, edgeGap)
+        .padding(.bottom, edgeGap)
+        .accessibilityElement(children: .contain)
+    }
+
+    // MARK: - Drawer
+
+    private var handle: some View {
+        Button {
+            setExpanded(!isExpanded)
+        } label: {
             Capsule()
                 .fill(Color(white: 0.45))
                 .frame(width: 44, height: 5)
-                .accessibilityHidden(true)
-            Grid(horizontalSpacing: 15, verticalSpacing: 14) {
-                GridRow {
-                    zoomCapsule.gridCellColumns(3)
-                    placeholder("flashlight.off.fill", label: "Torch")
-                }
-                GridRow(alignment: .top) {
-                    labeled("Flip") { flipButton }
-                    labeled("Ask") { askButton }
-                    labeled("Capture") { captureButton }
-                    labeled("Settings") {
-                        circleButton("gear", label: "Settings", action: openSettings)
-                    }
-                }
+                .frame(width: 120, height: 20)
+                .contentShape(.rect)
+        }
+        .padding(.vertical, -8)
+        .accessibilityLabel(isExpanded ? "Hide buttons" : "Show buttons")
+    }
+
+    /// Flip, Ask, Capture and Settings; dragging the drawer down tucks this row away.
+    private var bottomRow: some View {
+        let reveal = self.reveal
+        return HStack(alignment: .top, spacing: 15) {
+            labeled("Flip") { flipButton }
+            labeled("Ask") { askButton }
+            labeled("Capture") { captureButton }
+            labeled("Settings") {
+                circleButton("gear", label: "Settings", action: openSettings)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 12)
-        .padding(.bottom, 20)
-        .background(Color(white: 0.09), in: .rect(cornerRadii: .init(topLeading: 44, bottomLeading: 50, bottomTrailing: 50, topTrailing: 44)))
-        .padding(.horizontal, 8)
-        .padding(.bottom, 6)
-        .accessibilityElement(children: .contain)
+        .padding(.top, 14)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowHeight = $0 }
+        .frame(height: rowHeight > 0 ? reveal : nil, alignment: .top)
+        .clipped()
+        .opacity(rowHeight > 0 ? reveal / rowHeight : 1)
+        .allowsHitTesting(rowHeight == 0 || reveal >= rowHeight)
+        .accessibilityHidden(rowHeight > 0 && reveal <= 0)
+    }
+
+    /// How much of the bottom row shows, 0...rowHeight, following the finger while dragging.
+    private var reveal: CGFloat {
+        min(max(unclampedReveal, 0), rowHeight)
+    }
+
+    private var unclampedReveal: CGFloat {
+        (isExpanded ? rowHeight : 0) - dragOffset
+    }
+
+    private var drawerDrag: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                dragOffset = value.translation.height
+                let edge: DrawerEdge? = unclampedReveal >= rowHeight ? .expanded : unclampedReveal <= 0 ? .collapsed : nil
+                if let edge, edge != lastEdge { edgeHits += 1 }
+                lastEdge = edge
+            }
+            .onEnded { value in
+                let predicted = (isExpanded ? rowHeight : 0) - value.predictedEndTranslation.height
+                setExpanded(predicted > rowHeight / 2)
+            }
+    }
+
+    private func setExpanded(_ expanded: Bool) {
+        let edge: DrawerEdge = expanded ? .expanded : .collapsed
+        if edge != lastEdge { edgeHits += 1 }
+        lastEdge = edge
+        withAnimation(.snappy) {
+            isExpanded = expanded
+            dragOffset = 0
+        }
     }
 
     private var zoomCapsule: some View {

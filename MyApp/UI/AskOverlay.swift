@@ -191,6 +191,12 @@ struct AskOverlay: View {
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) { followUpField }
+            // Pulling up past the end of the transcript opens the keyboard for a follow-up.
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                Self.overscrollPastBottom(geometry) > Self.followUpPullDistance
+            } action: { wasPulled, isPulled in
+                if isPulled, !wasPulled, !followUpFocused { followUpFocused = true }
+            }
             Button { model.dismissAnswer() } label: {
                 Image(systemName: "xmark").font(.title3.bold()).foregroundStyle(.white)
                     .frame(width: 44, height: 44)
@@ -266,6 +272,18 @@ struct AskOverlay: View {
         followUp = ""
         followUpFocused = false
         model.askFollowUp(text)
+    }
+
+    /// How far past the end of the transcript a pull must go to open the follow-up keyboard.
+    static let followUpPullDistance: CGFloat = 60
+
+    /// Points scrolled beyond the bottom-most resting offset (0 when not past it).
+    static func overscrollPastBottom(_ geometry: ScrollGeometry) -> CGFloat {
+        let restingBottom = max(
+            geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height,
+            -geometry.contentInsets.top
+        )
+        return max(geometry.contentOffset.y - restingBottom, 0)
     }
 
     private func isBlank(_ text: String) -> Bool {
