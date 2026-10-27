@@ -143,12 +143,15 @@ struct AppModelTests {
 
     // MARK: - Asking
 
-    @Test func askingStartsFeedbackWithSettingsInterval() {
+    @Test func askingStartsFeedbackWithSettingsCue() {
         settings.waitInterval = 2.0
+        settings.waitDelay = 1.5
+        settings.vibrates = false
         startTypedAsk()
         #expect(model.phase == .asking(question: "what is this"))
         #expect(feedback.startCount == 1)
-        #expect(feedback.lastInterval == 2.0)
+        #expect(feedback.lastCue == settings.waitingCue)
+        #expect(feedback.lastCue?.delay == 1.5)
         #expect(feedback.isRunning)
     }
 

@@ -22,7 +22,7 @@ struct RootView: View {
             .overlay { AskOverlay(model: model) }
             .sheet(isPresented: $showSettings) {
                 SettingsView(settings: settings)
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium, .large])
             }
             .task { await camera.start() }
             .preferredColorScheme(.dark)

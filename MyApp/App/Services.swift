@@ -44,7 +44,20 @@ protocol SpeechServicing: AnyObject {
     func stop()
 }
 
+/// How the waiting feedback behaves, from Settings.
+nonisolated struct WaitingCue: Equatable, Sendable {
+    /// Seconds between dings.
+    var interval: Double
+    /// Seconds after waiting begins before the first ding.
+    var delay: Double = 0
+    /// Sound to play; nil plays none.
+    var soundURL: URL? = WaitingCue.defaultSoundURL
+    var vibrates = true
+
+    static let defaultSoundURL = Bundle.main.url(forResource: "waiting", withExtension: "m4a")
+}
+
 protocol WaitingFeedbackPlaying: AnyObject {
-    func start(interval: Double)
+    func start(_ cue: WaitingCue)
     func stop()
 }

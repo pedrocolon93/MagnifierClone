@@ -49,7 +49,7 @@ private final class PreviewSpeech: SpeechServicing {
 }
 
 private final class PreviewFeedback: WaitingFeedbackPlaying {
-    func start(interval: Double) {}
+    func start(_ cue: WaitingCue) {}
     func stop() {}
 }
 

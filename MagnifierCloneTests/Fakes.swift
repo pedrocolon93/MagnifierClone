@@ -80,12 +80,14 @@ final class FakeSpeech: SpeechServicing {
 final class FakeFeedback: WaitingFeedbackPlaying {
     private(set) var startCount = 0
     private(set) var stopCount = 0
-    private(set) var lastInterval: Double?
+    private(set) var lastCue: WaitingCue?
     private(set) var isRunning = false
 
-    func start(interval: Double) {
+    var lastInterval: Double? { lastCue?.interval }
+
+    func start(_ cue: WaitingCue) {
         startCount += 1
-        lastInterval = interval
+        lastCue = cue
         isRunning = true
     }
 

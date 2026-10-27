@@ -8,19 +8,19 @@ struct WaitingFeedbackTests {
 
     private func make() -> (WaitingFeedback, Counter) {
         let counter = Counter()
-        return (WaitingFeedback(ding: { counter.count += 1 }), counter)
+        return (WaitingFeedback(ding: { _ in counter.count += 1 }), counter)
     }
 
     @Test func startDingsImmediately() {
         let (feedback, counter) = make()
-        feedback.start(interval: 1.0)
+        feedback.start(WaitingCue(interval: 1.0))
         #expect(counter.count == 1)
         feedback.stop()
     }
 
     @Test func repeatsAtInterval() async throws {
         let (feedback, counter) = make()
-        feedback.start(interval: 0.1)
+        feedback.start(WaitingCue(interval: 0.1))
         try await Task.sleep(for: .seconds(0.35))
         feedback.stop()
         #expect(3...5 ~= counter.count)
@@ -28,11 +28,30 @@ struct WaitingFeedbackTests {
 
     @Test func stopHaltsDings() async throws {
         let (feedback, counter) = make()
-        feedback.start(interval: 0.1)
+        feedback.start(WaitingCue(interval: 0.1))
         feedback.stop()
         let after = counter.count
         try await Task.sleep(for: .seconds(0.3))
         #expect(counter.count == after)
+    }
+
+    @Test func delayHoldsFirstDing() async throws {
+        let (feedback, counter) = make()
+        feedback.start(WaitingCue(interval: 0.1, delay: 0.3))
+        #expect(counter.count == 0)
+        try await Task.sleep(for: .seconds(0.15))
+        #expect(counter.count == 0)
+        try await Task.sleep(for: .seconds(0.3))
+        feedback.stop()
+        #expect(counter.count >= 1)
+    }
+
+    @Test func stopDuringDelayPreventsDing() async throws {
+        let (feedback, counter) = make()
+        feedback.start(WaitingCue(interval: 0.1, delay: 0.1))
+        feedback.stop()
+        try await Task.sleep(for: .seconds(0.3))
+        #expect(counter.count == 0)
     }
 
     @Test func stopWhenNotRunningIsHarmless() {
@@ -44,8 +63,8 @@ struct WaitingFeedbackTests {
 
     @Test func restartDoesNotDoubleSchedule() async throws {
         let (feedback, counter) = make()
-        feedback.start(interval: 0.1)
-        feedback.start(interval: 0.1)
+        feedback.start(WaitingCue(interval: 0.1))
+        feedback.start(WaitingCue(interval: 0.1))
         try await Task.sleep(for: .seconds(0.35))
         feedback.stop()
         #expect(counter.count <= 6)

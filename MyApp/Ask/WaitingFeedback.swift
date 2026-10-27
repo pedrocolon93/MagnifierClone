@@ -4,22 +4,27 @@ import Foundation
 
 /// Repeating "ding" sound plus haptic while the app waits for an AI answer.
 final class WaitingFeedback: WaitingFeedbackPlaying {
-    private let ding: () -> Void
+    private let ding: (WaitingCue) -> Void
     private var task: Task<Void, Never>?
 
-    init(ding: @escaping () -> Void = WaitingFeedback.systemDing) {
+    init(ding: @escaping (WaitingCue) -> Void = WaitingFeedback.systemDing) {
         self.ding = ding
     }
 
-    func start(interval: Double) {
+    func start(_ cue: WaitingCue) {
         stop()
-        ding()
         let ding = self.ding
+        if cue.delay <= 0 { ding(cue) }
         task = Task { @MainActor in
+            if cue.delay > 0 {
+                try? await Task.sleep(for: .seconds(cue.delay))
+                if Task.isCancelled { return }
+                ding(cue)
+            }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(interval))
+                try? await Task.sleep(for: .seconds(cue.interval))
                 if Task.isCancelled { break }
-                ding()
+                ding(cue)
             }
         }
     }
@@ -34,15 +39,15 @@ final class WaitingFeedback: WaitingFeedbackPlaying {
     nonisolated(unsafe) private static var player: AVAudioPlayer?
     nonisolated(unsafe) private static var engine: CHHapticEngine?
 
-    nonisolated static func systemDing() {
-        playSound()
-        playHaptic()
+    nonisolated static func systemDing(_ cue: WaitingCue) {
+        if let url = cue.soundURL { playSound(at: url) }
+        if cue.vibrates { playHaptic() }
     }
 
-    nonisolated private static func playSound() {
+    /// Plays `url` once; also used by Settings to preview a sound. Reuses the player while the sound is unchanged.
+    nonisolated static func playSound(at url: URL) {
         Task.detached {
-            if player == nil {
-                guard let url = Bundle.main.url(forResource: "waiting", withExtension: "m4a") else { return }
+            if player?.url != url {
                 // .ambient + .mixWithOthers respects the silent switch.
                 try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
                 try? AVAudioSession.sharedInstance().setActive(true)
@@ -51,7 +56,7 @@ final class WaitingFeedback: WaitingFeedbackPlaying {
             }
             player?.currentTime = 0
             player?.play()
-        }|
+        }
     }
 
     nonisolated private static func playHaptic() {

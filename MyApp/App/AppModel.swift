@@ -282,7 +282,7 @@ final class AppModel {
 
     private func startFeedback() {
         isFeedbackRunning = true
-        feedback.start(interval: settings.waitInterval)
+        feedback.start(settings.waitingCue)
     }
 
     private func stopFeedback() {
